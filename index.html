@@ -1,0 +1,120 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Zomato-Style Voice Assistant</title>
+    <style>
+        body { font-family: Arial, sans-serif; display: flex; flex-direction: column; align-items: center; justify-content: center; height: 100vh; background-color: #f8f9fa; margin: 0; }
+        #mic-btn { padding: 20px 40px; font-size: 20px; border-radius: 50px; border: none; background-color: #cb202d; color: white; cursor: pointer; box-shadow: 0 4px 6px rgba(0,0,0,0.1); transition: 0.3s; }
+        #mic-btn:active { background-color: #a81a25; }
+        .recording { animation: pulse 1.5s infinite; }
+        @keyframes pulse {
+            0% { transform: scale(1); box-shadow: 0 0 0 0 rgba(203, 32, 45, 0.7); }
+            70% { transform: scale(1.05); box-shadow: 0 0 0 15px rgba(203, 32, 45, 0); }
+            100% { transform: scale(1); box-shadow: 0 0 0 0 rgba(203, 32, 45, 0); }
+        }
+        #status { margin-top: 20px; font-weight: bold; }
+        #chat-box { margin-top: 20px; width: 80%; max-width: 600px; height: 300px; overflow-y: auto; background: white; padding: 20px; border-radius: 10px; box-shadow: 0 2px 10px rgba(0,0,0,0.05); }
+        .msg { margin-bottom: 10px; line-height: 1.4; }
+        .user-msg { color: #333; text-align: right; }
+        .bot-msg { color: #cb202d; text-align: left; }
+    </style>
+</head>
+<body>
+
+    <button id="mic-btn">Tap to Speak</button>
+    <div id="status">Press the button to start.</div>
+    <div id="chat-box"></div>
+
+    <script>
+        const micBtn = document.getElementById('mic-btn');
+        const statusText = document.getElementById('status');
+        const chatBox = document.getElementById('chat-box');
+
+        // State Management
+        let chatHistory = [];
+        let singleVoice = null;
+
+        // Voice Setup: Ensure we use the exact same voice every time
+        function setupVoice() {
+            const voices = window.speechSynthesis.getVoices();
+            if (voices.length > 0) {
+                singleVoice = voices.find(v => v.name.includes('Google UK English Female')) || 
+                              voices.find(v => v.lang.includes('en-')) || 
+                              voices[0];
+            }
+        }
+        
+        window.speechSynthesis.onvoiceschanged = setupVoice;
+        setupVoice(); 
+
+        const SpeechRecognition = window.SpeechRecognition || window.webkitSpeechRecognition;
+        const recognition = new SpeechRecognition();
+        
+        recognition.onstart = function() {
+            micBtn.classList.add('recording');
+            statusText.innerText = "Listening...";
+        };
+
+        function addMessageToUI(role, text) {
+            const msgDiv = document.createElement('div');
+            msgDiv.className = `msg ${role === 'user' ? 'user-msg' : 'bot-msg'}`;
+            msgDiv.innerHTML = `<b>${role === 'user' ? 'You' : 'Assistant'}:</b> ${text}`;
+            chatBox.appendChild(msgDiv);
+            chatBox.scrollTop = chatBox.scrollHeight;
+        }
+
+        recognition.onresult = async function(event) {
+            const userText = event.results[0][0].transcript;
+            
+            addMessageToUI('user', userText);
+            statusText.innerText = "Processing...";
+            micBtn.classList.remove('recording');
+
+            try {
+                // Send text AND history to backend (using relative path for deployment)
+                const response = await fetch('/chat', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ 
+                        text: userText,
+                        history: chatHistory 
+                    })
+                });
+                
+                const data = await response.json();
+                
+                chatHistory.push({ role: "user", content: userText });
+                addMessageToUI('assistant', data.response);
+                chatHistory.push({ role: "assistant", content: data.response });
+                
+                statusText.innerText = "Press the button to speak.";
+                
+                speakText(data.response);
+
+            } catch (error) {
+                statusText.innerText = "Error connecting to backend.";
+                console.error(error);
+            }
+        };
+
+        recognition.onerror = function(event) {
+            micBtn.classList.remove('recording');
+            statusText.innerText = "Error: " + event.error;
+        };
+
+        function speakText(text) {
+            const utterance = new SpeechSynthesisUtterance(text);
+            if (singleVoice) {
+                utterance.voice = singleVoice;
+            }
+            window.speechSynthesis.speak(utterance);
+        }
+
+        micBtn.addEventListener('click', () => {
+            recognition.start();
+        });
+    </script>
+</body>
+</html>

@@ -8,7 +8,6 @@ from google.genai import types
 
 app = FastAPI()
 
-# Allow frontend to talk to backend
 app.add_middleware(
     CORSMiddleware,
     allow_origins=["*"], 
@@ -17,7 +16,6 @@ app.add_middleware(
     allow_headers=["*"],
 )
 
-# Initialize the Gemini Client
 client = genai.Client()
 
 class Message(BaseModel):
@@ -28,7 +26,6 @@ class UserQuery(BaseModel):
     text: str
     history: List[Message] = []
 
-# The AI's brain and rules
 SYSTEM_PROMPT = """
 You are a friendly and helpful voice assistant for a food delivery app similar to Zomato. 
 CRITICAL RULES:
@@ -37,15 +34,15 @@ CRITICAL RULES:
 3. If a user has a complaint (e.g., missing food, cold food), be empathetic, apologize, and ask for their order number to initiate a refund or replacement.
 """
 
-# --- NEW: Serve the HTML Frontend ---
+
 @app.get("/")
 async def serve_frontend():
     return FileResponse("index.html")
 
-# --- Chat API Endpoint ---
+
 @app.post("/chat")
 async def chat(query: UserQuery):
-    # 1. Format the conversation history
+   
     formatted_history = []
     for msg in query.history:
         gemini_role = "user" if msg.role == "user" else "model"
@@ -53,12 +50,12 @@ async def chat(query: UserQuery):
             {"role": gemini_role, "parts": [{"text": msg.content}]}
         )
     
-    # 2. Add the current user query
+   
     formatted_history.append(
         {"role": "user", "parts": [{"text": query.text}]}
     )
 
-    # 3. Generate response using Gemini
+    
     try:
         response = client.models.generate_content(
             model='gemini-2.5-flash',
